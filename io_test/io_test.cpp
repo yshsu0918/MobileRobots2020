@@ -17,7 +17,7 @@ int TouchPinB=28;
 #define BACK 1
 #define FIND_LED 2
 #define SPIN 3
-#define SPINREV 6
+#define SPINFIX 6
 #define FORWARD 4
 #define END 5
 
@@ -40,8 +40,8 @@ void MoveStop(ros::Publisher& Lmotor_publisher, ros::Publisher& Rmotor_publisher
 	Rmotor_publisher.publish(msgR);
 }
 void MoveSpin(ros::Publisher& Lmotor_publisher, ros::Publisher& Rmotor_publisher){
-	msgL.data = 15;
-	msgR.data = -15;
+	msgL.data = -25;
+	msgR.data = 25;
 	Lmotor_publisher.publish(msgL);
 	Rmotor_publisher.publish(msgR);
 }
@@ -142,65 +142,82 @@ int main(int argc, char **argv)
 			ROS_INFO("last_state_number_count: %d", last_state_number_count);
 			ROS_INFO("status: %d, %s", status, STATUS_STRING[status].c_str());
 		}
-		if(_TouchPinB ){
+		if( _TouchPinB ){
 			status=END;
 		}
 		switch(status){
 			case COLLIDE:
-				MoveStop(Lmotor_publisher, Rmotor_publisher);
-				status = BACK;
-				last_state_number_count = number_count;
-				break;
-			case BACK:
-				MoveBackward(Lmotor_publisher, Rmotor_publisher);
-				if(number_count - last_state_number_count > 20){
+				if(number_count - last_state_number_count > 3){
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					status = FIND_LED;
 					last_state_number_count = number_count;
 				}
+				else{
+					cout << "In COLLIDE" << endl;
+					MoveStop(Lmotor_publisher, Rmotor_publisher);
+					status = BACK;
+					last_state_number_count = number_count;
+				}
+				break;
+			case BACK:
+				if(number_count - last_state_number_count > 13){
+					MoveStop(Lmotor_publisher, Rmotor_publisher);
+					status = FIND_LED;
+					last_state_number_count = number_count;
+				}
+				else{
+					cout << "Inside BACK" << endl;
+					MoveBackward(Lmotor_publisher, Rmotor_publisher);
+				}
 				break;
 			case FIND_LED:
-				if(_TouchPinL || _TouchPinR){
-					cout << "Collide while spin" << endl;
-					MoveStop(Lmotor_publisher, Rmotor_publisher);
-					last_state_number_count = number_count;
-					status = BACK;
-				}
+
 				if(_light == ON_LIGHT){
 					cout << "FIND LED!!" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					
 					last_state_number_count = number_count;
-					status = SPINREV;
+					status = SPINFIX;
+					cout << "Turn to SPINFIX" << endl;
+				}
+				else if(_TouchPinL || _TouchPinR){
+					cout << "Collide while spin" << endl;
+					MoveStop(Lmotor_publisher, Rmotor_publisher);
+					last_state_number_count = number_count;
+					status = COLLIDE;
+					cout << "Turn to COLLIDE" << endl;
 				}
 				else if(number_count - last_state_number_count > 50){
 					cout << "CANNOT FIND LED" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
 					status = SPIN;
+					cout << "Turn to SPIN" << endl;
 				}
 				else{
 					MoveSpin(Lmotor_publisher, Rmotor_publisher);
 					status = FIND_LED;
 				}
 				break;
-			case SPINREV:
+			case SPINFIX:
 				if(number_count - last_state_number_count > 5){
 					cout << "REV finish" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
 					status = FORWARD;
+					cout << "Turn to FORWARD" << endl;
 				}
 				else{
-					MoveSpinRev(Lmotor_publisher, Rmotor_publisher);
+					MoveSpin(Lmotor_publisher, Rmotor_publisher);
 				}
 				break;
 			case SPIN:
 				if(_TouchPinL || _TouchPinR){
-					cout << "Collide while spin" << endl;
+					cout << "Collide while Random spin" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
-					status = BACK;
+					status = COLLIDE;
+					cout << "Turn to COLLIDE" << endl;
 				}
 
 				if( !randomed){
@@ -213,22 +230,27 @@ int main(int argc, char **argv)
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
 					status = FORWARD;
+					cout << "Turn to FORWARD" << endl;
 					randomed = 0;
 				}
 				break;
 			case FORWARD:
 				if(_TouchPinL || _TouchPinR ){
+					last_state_number_count = number_count;
 					status=COLLIDE;
+					cout << "Forward Collide"<< endl;
 				}
 				else if(number_count - last_state_number_count > 80){
 					last_state_number_count = number_count;
 					status=FIND_LED;
+					cout << "Turn to FINDLED" << endl;
 				}
 				else{
 					MoveFoward(Lmotor_publisher, Rmotor_publisher);
 				}
 				break;
 			case END:
+				cout << "ENDDDDDDDDDDDDDDD" << endl;
 				MoveStop(Lmotor_publisher, Rmotor_publisher);
 				status = END;
 				break;
