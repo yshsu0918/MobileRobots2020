@@ -11,16 +11,15 @@
 using namespace std;
 int LightPin=4;
 
-//TODO
-
 //https://pinout.xyz/pinout/wiringpi
 
 int TouchPinL=7;
 int TouchPinR=27;
 int TouchPinB=28;
-
 int IRReceiverPin = 29;
-double goal_ir_ratio = 0.17;
+
+
+double goal_ir_ratio = 0.19;
 #define COLLIDE 0 
 #define BACK 1
 #define FIND_LED 2
@@ -66,6 +65,12 @@ void MoveStop(ros::Publisher& Lmotor_publisher, ros::Publisher& Rmotor_publisher
 void MoveSpin(ros::Publisher& Lmotor_publisher, ros::Publisher& Rmotor_publisher){
 	msgL.data = -25;
 	msgR.data = 25;
+	Lmotor_publisher.publish(msgL);
+	Rmotor_publisher.publish(msgR);
+}
+void MoveSpinFast(ros::Publisher& Lmotor_publisher, ros::Publisher& Rmotor_publisher){
+	msgL.data = -40;
+	msgR.data = 40;
 	Lmotor_publisher.publish(msgL);
 	Rmotor_publisher.publish(msgR);
 }
@@ -126,10 +131,7 @@ void number_callback(const std_msgs::Int32& msg){
   _light = msg.data;
 }
 int _light_val = 700;
-bool IsLightOn(){
-  return _light < _light_val;
-}
-
+bool IsLightOn;
 int main(int argc, char **argv)
 {
 	// signal(SIGINT, signalHandler);  
@@ -155,7 +157,7 @@ int main(int argc, char **argv)
 	
 	string STATUS_STRING[] = {"COLLIDE", "BACK", "FIND_LED", "SPIN", "FORWARD","END", "FIND_IR","CAPTURE_LED"};
 	//Current state of each pin
-    int _TouchPinL=0, _TouchPinR=0, _TouchPinB=0;
+    int _TouchPinL=0, _TouchPinR=0, _TouchPinB=0,min_light=900;
     double _IRReceiverPin=0,L_IRReceiverPin=0;
 	//Last state of each pin
     int L_light=0, L_TouchPinL=0, L_TouchPinR=0, L_TouchPinB=0, L_status=0 ;
@@ -166,20 +168,20 @@ int main(int argc, char **argv)
 	else
 		status = FORWARD;
 	
-  if(argc == 3){
-    
-    _light_val = atoi(argv[1]);
-    cout << "set _light_val to " << _light_val;
-  }
+	if(argc == 3){
+		_light_val = atoi(argv[1]);
+		cout << "set _light_val to " << _light_val;
+		goal_ir_ratio = atof(argv[2]);
+	}
  
 	int last_state_number_count = 0;
 	int SPIN_random, randomed=0;
-  int backstatus = 0;
+	int backstatus = 0;
 	
 	MoveStop(Lmotor_publisher, Rmotor_publisher);
 	cout << "init status " << STATUS_STRING[status].c_str() << endl;
 	ros::Subscriber number_subscribe = node_obj.subscribe("/ard2rpi", 1, number_callback);
-  string current_target("LED");
+	string current_target("LED");
   
 	while (ros::ok())
 	{
@@ -205,8 +207,8 @@ int main(int argc, char **argv)
 		}
     
 		if ( L_TouchPinL != _TouchPinL || 
-		L_TouchPinR != _TouchPinR || L_TouchPinB != _TouchPinB || 
-		status != L_status ){		
+			 L_TouchPinR != _TouchPinR || L_TouchPinB != _TouchPinB || 
+			 status != L_status) {		
 			ROS_INFO("LightPin: %d",_light);
 			ROS_INFO("TouchPinL: %d",_TouchPinL);
 			ROS_INFO("TouchPinR: %d",_TouchPinR);
@@ -218,7 +220,7 @@ int main(int argc, char **argv)
 		}
 		if( _TouchPinB && current_target == "LED" ){
 			status=CAPTURE_LED;
-      current_target = "IR";
+			current_target = "IR";
 		}
 		switch(status){
 			case COLLIDE:
@@ -230,23 +232,22 @@ int main(int argc, char **argv)
 				else{
 					cout << "In COLLIDE" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
-          string Q("BACKWARD");
-          if(_TouchPinL && _TouchPinR){
-            backstatus = 0;
-          }                                     
-          else if(_TouchPinL){
-            backstatus = 2;
-            Q = "BACKRIGHT";
-          }
-          else if(_TouchPinR){
-            backstatus = 1;
-            Q = "BACKLEFT";
-          }
-          else{
-            backstatus = 0;
-          }
-
-          cout << "In COLLIDE, backstatus= " << backstatus << "," << Q << endl;
+					string Q("BACKWARD");
+					if(_TouchPinL && _TouchPinR){
+						backstatus = 0;
+					}                                     
+					else if(_TouchPinL){
+						backstatus = 2;
+						Q = "BACKRIGHT";
+					}
+					else if(_TouchPinR){
+						backstatus = 1;
+						Q = "BACKLEFT";
+					}
+					else{
+						backstatus = 0;
+					}
+					cout << "In COLLIDE, backstatus= " << backstatus << "," << Q << endl;
 					status = BACK;
 					last_state_number_count = number_count;
 				}
@@ -259,50 +260,54 @@ int main(int argc, char **argv)
 				}
 				else{
 					//cout << "Inside BACK" << endl;
-          switch(backstatus){
-            case 0:
-              //cout << "Inside MoveBackward" << endl;
-              MoveBackward(Lmotor_publisher, Rmotor_publisher);
-              break;
-            case 1: //_L == 0
-              //cout << "Inside MoveBackRight" << endl;
-              MoveBackRight(Lmotor_publisher, Rmotor_publisher);
-              break;
-            case 2: //_R == 0
-              //cout << "Inside MoveBackLeft" << endl;
-              MoveBackLeft(Lmotor_publisher, Rmotor_publisher);
-              break;
-            default:
-              MoveBackward(Lmotor_publisher, Rmotor_publisher);
-          }
+					switch(backstatus){
+					case 0:
+						//cout << "Inside MoveBackward" << endl;
+						MoveBackward(Lmotor_publisher, Rmotor_publisher);
+						break;
+					case 1: //_L == 0
+						//cout << "Inside MoveBackRight" << endl;
+						MoveBackRight(Lmotor_publisher, Rmotor_publisher);
+						break;
+					case 2: //_R == 0
+						//cout << "Inside MoveBackLeft" << endl;
+						MoveBackLeft(Lmotor_publisher, Rmotor_publisher);
+						break;
+					default:
+						MoveBackward(Lmotor_publisher, Rmotor_publisher);
+					}
 				}
 				break;
 			case FIND_LED:
-
-				if( IsLightOn() ){
-					cout << "FIND LED!!" << endl;
-					MoveStop(Lmotor_publisher, Rmotor_publisher);
-					
-					last_state_number_count = number_count;
-					status = SPINFIX;
-					cout << "Turn to SPINFIX" << endl;
-				}
-				else if(_TouchPinL || _TouchPinR){
+				if(_TouchPinL || _TouchPinR){
 					cout << "Collide while spin" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
 					status = COLLIDE;
 					cout << "Turn to COLLIDE" << endl;
 				}
-				else if(number_count - last_state_number_count > 50){
-					cout << "CANNOT FIND LED" << endl;
+				else if(IsLightOn){
+					cout << "FIND LED!!" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
-					status = SPIN;
-					cout << "Turn to SPIN" << endl;
+					status = FORWARD;
+					IsLightOn = false;
+					cout << "Turn to FORWARD" << endl;
+				}
+				else if(number_count - last_state_number_count > 40){//60
+					MoveSpinRev(Lmotor_publisher, Rmotor_publisher); //?
+					cout << "FINISH SPIN FIND LED" << endl;
+					if (_light < min_light+20){
+						min_light = 900;
+						IsLightOn = true;	
+					}
+					status = FIND_LED;
+					cout << "SPIN to find min" << endl;
 				}
 				else{
-					MoveSpin(Lmotor_publisher, Rmotor_publisher);
+					MoveSpinFast(Lmotor_publisher, Rmotor_publisher);
+					if(_light < min_light)
+						min_light = _light;
 					status = FIND_LED;
 				}
 				break;
@@ -322,7 +327,7 @@ int main(int argc, char **argv)
 				if( !randomed){
 					SPIN_random = rand()%15+1;
 					randomed = 1;
-          cout << "Random Spin " << SPIN_random << endl;
+					cout << "Random Spin " << SPIN_random << endl;
 				}
 
 				if(_TouchPinL || _TouchPinR){
@@ -360,19 +365,19 @@ int main(int argc, char **argv)
 				break;
 			case CAPTURE_LED:
 				cout << "CAPTURE_LED" << endl;
-        status = FIND_IR;
+				status = FIND_IR;
 				break;
-      case FIND_IR:
-        cout << "FIND_IR" << endl;
-        _IRReceiverPin=calculate_IR_ratio(loop_rate);
-        if( (_IRReceiverPin>goal_ir_ratio-0.03)||(_IRReceiverPin<goal_ir_ratio+0.03)){
+			case FIND_IR:
+				cout << "FIND_IR" << endl;
+				_IRReceiverPin=calculate_IR_ratio(loop_rate);
+				if( (_IRReceiverPin>goal_ir_ratio-0.03) && (_IRReceiverPin<goal_ir_ratio+0.03)){
 					cout << "FIND IR!!" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
 					status = SPINFIX;
 					cout << "Turn to SPINFIX" << endl;
 				}
-        else if(_TouchPinL || _TouchPinR){
+				else if(_TouchPinL || _TouchPinR){
 					cout << "Collide while spin" << endl;
 					MoveStop(Lmotor_publisher, Rmotor_publisher);
 					last_state_number_count = number_count;
@@ -390,12 +395,10 @@ int main(int argc, char **argv)
 					MoveSpin(Lmotor_publisher, Rmotor_publisher);
 					status = FIND_IR;
 				} 
-        break;
+				break;
 		}
 		number_count ++;
-   
-    
-    ros::spinOnce();
+		ros::spinOnce();
         
 		//calculate_IR_ratio(loop_rate);
 		
@@ -407,6 +410,5 @@ int main(int argc, char **argv)
 	}
 	return 0;
 }
-
 
 
